@@ -1,0 +1,150 @@
+esphome:
+  name: esp-energy-meter
+  friendly_name: ESP Energy Meter
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+   encryption:
+    # Replace this with 32-byte base64 encoded string.
+    # Generate 32-byte base64 encoded string in https://esphome.io/components/api.html
+     key: "redacted"
+
+ota:
+  password: "redacted"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Esp-Energy-Meter"
+    password: "redacted"
+
+captive_portal:
+
+web_server:
+  port: 80
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: IP Address
+      id: ip
+    ssid:
+      name: Connected SSID
+    bssid:
+      name: Connected BSSID
+    mac_address:
+      name: Mac Wifi Address
+    scan_results:
+      name: Latest Scan Results
+    dns_address:
+      name: DNS Address
+  - platform: version
+    name: "ESPHome Version"
+
+uart:
+  rx_pin: GPIO16
+  tx_pin: GPIO17
+  baud_rate: 9600
+
+modbus:
+
+sensor:
+
+  - platform: uptime
+    name: Uptime
+
+  - platform: wifi_signal # Reports the WiFi signal strength/RSSI in dB
+    name: "WiFi Signal dB"
+    id: wifi_signal_db
+    update_interval: 60s
+    entity_category: "diagnostic"
+
+  - platform: copy # Reports the WiFi signal strength in %
+    source_id: wifi_signal_db
+    name: "WiFi Signal Percent"
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "Signal %"
+    entity_category: "diagnostic"
+
+  - platform: pzemac
+    id: pzemac_1
+    current:
+      name: "Current"
+      id: current
+    voltage:
+      name: "Voltage"
+      id: voltage
+    energy:
+      name: "Energy"
+      id: energy
+    power:
+      name: "Power"
+      id: power
+    frequency:
+      name: "Frequency"
+      id: frequency
+    power_factor:
+      name: "Power Factor"
+      id: powerfactor
+    update_interval: 30s
+
+font:
+  - file: "gfonts://Roboto"
+    id: roboto
+    size: 12
+
+  - file: 'materialdesignicons-webfont.ttf'
+    id: icon
+    size: 12
+    glyphs:
+      - "\U000F140B" #lightbolt
+
+i2c:
+  sda: GPIO21
+  scl: GPIO22
+  frequency: 800kHz
+
+display:
+- platform: ssd1306_i2c
+  model: "SSD1306 128x64"
+  address: 0x3C
+  lambda: |-
+    it.printf(0, 0, id(icon), "\U000F140B");
+    it.printf(13, 0, id(roboto), id(ip).state.c_str());
+    it.line(0, 13, it.get_width(), 13);
+    if(id(current).has_state()){
+      it.printf(0, 14, id(roboto), "Current: %.3f A", id(current).state);
+    }
+    if(id(voltage).has_state()){
+      it.printf(0, 25, id(roboto), "Voltage: %.1f V", id(voltage).state);
+    }
+    if(id(energy).has_state()){
+      it.printf(0, 37, id(roboto), "Energy: %0.0f WH", id(energy).state);
+    }
+    if(id(power).has_state()){
+      it.printf(0, 49, id(roboto), "Power: %.2f W", id(power).state);
+    }
+
+button:
+  - platform: template
+    name: "kWh Reset"
+    on_press:
+      - pzemac.reset_energy: pzemac_1
+
+  - platform: restart
+    name: "Restart"
+
+  - platform: shutdown
+    name: "Shutdown"
